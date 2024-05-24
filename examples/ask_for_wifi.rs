@@ -1,13 +1,17 @@
 use embedded_svc::http::Headers as _;
+use esp_idf_experiments::{
+    http::{http_server, https_client, ntfy_send},
+    wifi::{wifi_access_point, wifi_connect},
+};
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::peripherals::Peripherals,
-    http::{server::EspHttpServer, Method},
+    http::Method,
     io::{Read as _, Write as _},
     nvs::EspDefaultNvsPartition,
-    wifi::{self, AccessPointConfiguration, AuthMethod, BlockingWifi, EspWifi},
+    wifi::{BlockingWifi, EspWifi},
 };
-use log::info;
+use log::{error, info};
 use std::sync::mpsc;
 
 const AP_SSID: &str = "esp32c3";
@@ -16,12 +20,6 @@ static AP_INDEX_HTML: &str = include_str!("ask_for_wifi.html");
 
 // Max payload length
 const MAX_LEN: usize = 256;
-
-// Need lots of stack to parse JSON
-const STACK_SIZE: usize = 10240;
-
-// Wi-Fi channel, between 1 and 11
-const CHANNEL: u8 = 11;
 
 #[derive(serde::Deserialize)]
 struct FormData<'a> {
@@ -49,12 +47,7 @@ fn main() -> anyhow::Result<()> {
 
     wifi_access_point(&mut wifi, AP_SSID, AP_PASSWORD)?;
 
-    let server_configuration = esp_idf_svc::http::server::Configuration {
-        stack_size: STACK_SIZE,
-        ..Default::default()
-    };
-
-    let mut server = EspHttpServer::new(&server_configuration)?;
+    let mut server = http_server()?;
 
     server.fn_handler("/", Method::Get, |req| {
         req.into_ok_response()?
@@ -77,21 +70,27 @@ fn main() -> anyhow::Result<()> {
         req.read_exact(&mut buf)?;
         let mut resp = req.into_ok_response()?;
 
-        if let Ok(form) = serde_json::from_slice::<FormData>(&buf) {
-            write!(resp, "Connecting to {}...", form.ssid)?;
-            tx.send((form.ssid.to_string(), form.password.to_string()))?;
-        } else {
-            resp.write_all("JSON error".as_bytes())?;
+        match serde_json::from_slice::<FormData>(&buf) {
+            Ok(form) => {
+                write!(resp, "Connecting to {}...", form.ssid)?;
+                tx.send((form.ssid.to_string(), form.password.to_string()))?;
+            }
+            Err(e) => {
+                error!("{}", e);
+                resp.write_all("JSON error".as_bytes())?;
+            }
         }
 
         Ok(())
     })?;
 
-    // wifi_connect(&mut wifi, form.ssid, form.password);
-
     let (ssid, password) = rx.recv()?;
 
     wifi_connect(&mut wifi, ssid.as_str(), password.as_str())?;
+
+    let mut client = https_client()?;
+
+    info!("{}", ntfy_send(&mut client, "garbaz", "WOW!")?);
 
     // // Keep server running beyond when main() returns (forever)
     // // Do not call this if you ever want to stop or access it later.

@@ -26,14 +26,14 @@ const SSID: &str = "esp32c3";
 const PASSWORD: &str = "12345678";
 static INDEX_HTML: &str = include_str!("access_point.html");
 
+// Wi-Fi channel, between 1 and 11
+const CHANNEL: u8 = 11;
+
 // Max payload length
 const MAX_LEN: usize = 128;
 
 // Need lots of stack to parse JSON
 const STACK_SIZE: usize = 10240;
-
-// Wi-Fi channel, between 1 and 11
-const CHANNEL: u8 = 11;
 
 #[derive(Deserialize)]
 struct FormData<'a> {
@@ -131,4 +131,3 @@ fn create_server() -> anyhow::Result<EspHttpServer<'static>> {
 
     Ok(EspHttpServer::new(&server_configuration)?)
 }
-
