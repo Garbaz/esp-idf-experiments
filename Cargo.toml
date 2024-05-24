@@ -6,11 +6,14 @@ edition = "2021"
 resolver = "2"
 rust-version = "1.71"
 
+[lib]
+test = false
+bench = false
+
 [[bin]]
 name = "esp-idf-experiments"
 test = false
 bench = false
-
 
 [profile.release]
 opt-level = "s"

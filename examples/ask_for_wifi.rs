@@ -1,15 +1,14 @@
-use std::{sync::mpsc, time::Duration};
-
 use embedded_svc::http::Headers as _;
 use esp_idf_svc::{
-    eventloop::{self, EspEventLoop, EspSystemEventLoop},
+    eventloop::EspSystemEventLoop,
     hal::peripherals::Peripherals,
     http::{server::EspHttpServer, Method},
     io::{Read as _, Write as _},
-    nvs::{EspDefaultNvsPartition, EspNvsPartition, NvsDefault},
+    nvs::EspDefaultNvsPartition,
     wifi::{self, AccessPointConfiguration, AuthMethod, BlockingWifi, EspWifi},
 };
 use log::info;
+use std::sync::mpsc;
 
 const AP_SSID: &str = "esp32c3";
 const AP_PASSWORD: &str = "12345678";
@@ -24,7 +23,7 @@ const STACK_SIZE: usize = 10240;
 // Wi-Fi channel, between 1 and 11
 const CHANNEL: u8 = 11;
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize)]
 struct FormData<'a> {
     ssid: &'a str,
     password: &'a str,
@@ -80,7 +79,7 @@ fn main() -> anyhow::Result<()> {
 
         if let Ok(form) = serde_json::from_slice::<FormData>(&buf) {
             write!(resp, "Connecting to {}...", form.ssid)?;
-            tx.send(form.clone())?;
+            tx.send((form.ssid.to_string(), form.password.to_string()))?;
         } else {
             resp.write_all("JSON error".as_bytes())?;
         }
@@ -90,7 +89,9 @@ fn main() -> anyhow::Result<()> {
 
     // wifi_connect(&mut wifi, form.ssid, form.password);
 
-    let form = rx.recv()?;
+    let (ssid, password) = rx.recv()?;
+
+    wifi_connect(&mut wifi, ssid.as_str(), password.as_str())?;
 
     // // Keep server running beyond when main() returns (forever)
     // // Do not call this if you ever want to stop or access it later.
@@ -100,54 +101,5 @@ fn main() -> anyhow::Result<()> {
     // core::mem::forget(server);
 
     // Main task no longer needed, free up some memory
-    Ok(())
-}
-
-fn wifi_access_point(
-    wifi: &mut BlockingWifi<EspWifi<'static>>,
-    ssid: &str,
-    password: &str,
-) -> anyhow::Result<()> {
-    let config = wifi::Configuration::AccessPoint(AccessPointConfiguration {
-        ssid: ssid.try_into().unwrap(),
-        ssid_hidden: false,
-        auth_method: AuthMethod::WPA2Personal,
-        password: password.try_into().unwrap(),
-        channel: CHANNEL,
-        ..Default::default()
-    });
-    wifi.set_configuration(&config)?;
-    wifi.start()?;
-    info!("Wifi started");
-    wifi.wait_netif_up()?;
-    info!("Wifi netif up");
-
-    Ok(())
-}
-
-fn wifi_connect(
-    wifi: &mut BlockingWifi<EspWifi<'static>>,
-    ssid: &str,
-    password: &str,
-) -> anyhow::Result<()> {
-    let wifi_configuration = wifi::Configuration::Client(wifi::ClientConfiguration {
-        ssid: ssid.try_into().unwrap(),
-        bssid: None,
-        auth_method: AuthMethod::WPA2Personal,
-        password: password.try_into().unwrap(),
-        channel: None,
-    });
-
-    wifi.set_configuration(&wifi_configuration)?;
-
-    wifi.start()?;
-    info!("Wifi started");
-
-    wifi.connect()?;
-    info!("Wifi connected");
-
-    wifi.wait_netif_up()?;
-    info!("Wifi netif up");
-
     Ok(())
 }

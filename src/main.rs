@@ -1,5 +1,3 @@
-mod misc;
-mod temp;
 
 use core::convert::TryInto;
 use embedded_graphics::{
@@ -182,48 +180,6 @@ fn text(
         .unwrap();
 
     display.flush().unwrap();
-}
-
-fn ntfy_send(
-    client: &mut HttpClient<EspHttpConnection>,
-    topic: &str,
-    notification: &str,
-) -> anyhow::Result<String> {
-    let url = format!("https://ntfy.sh/{topic}");
-    post(client, url.as_str(), notification.as_bytes())
-}
-
-fn post(
-    client: &mut HttpClient<EspHttpConnection>,
-    url: &str,
-    data: &[u8],
-) -> anyhow::Result<String> {
-    let content_length_header = format!("{}", data.len());
-    let headers = [
-        ("content-type", "text/plain"),
-        ("content-length", &*content_length_header),
-    ];
-
-    let mut request = client.post(url, &headers)?;
-    request.write_all(data)?;
-    request.flush()?;
-    let mut response = request.submit()?;
-
-    let mut result = String::new();
-
-    loop {
-        let mut buf = [0u8; 1024];
-        let bytes_read = io::try_read_full(&mut response, &mut buf).map_err(|e| e.0)?;
-        if bytes_read == 0 {
-            break;
-        }
-        match std::str::from_utf8(&buf[0..bytes_read]) {
-            Ok(body) => result.push_str(body),
-            Err(e) => error!("Error decoding response body: {}", e),
-        };
-    }
-
-    Ok(result)
 }
 
 fn connect_wifi(wifi: &mut BlockingWifi<EspWifi<'static>>) -> anyhow::Result<()> {
