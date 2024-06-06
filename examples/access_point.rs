@@ -24,7 +24,7 @@ use serde::Deserialize;
 
 const SSID: &str = "esp32c3";
 const PASSWORD: &str = "12345678";
-static INDEX_HTML: &str = include_str!("access_point.html");
+static INDEX_HTML: &str = include_str!("../res/access_point.html");
 
 // Wi-Fi channel, between 1 and 11
 const CHANNEL: u8 = 11;
