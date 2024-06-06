@@ -1,30 +1,19 @@
-
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::peripherals::Peripherals,
-    nvs::EspDefaultNvsPartition,
+    nvs::{EspDefaultNvsPartition, EspNvs},
     wifi::{BlockingWifi, EspWifi},
 };
-use log::info;
+use log::{error, info};
 
 use esp_idf_experiments::{
-    ask_for_wifi::ask_for_wifi,
+    ask_for_wifi::{ask_for_wifi, WifiCreds},
     http::{https_client, ntfy_send},
     wifi::wifi_connect,
 };
 
 const AP_SSID: &str = "esp32c3";
 const AP_PASSWORD: &str = "12345678";
-static AP_INDEX_HTML: &str = include_str!("../res/ask_for_wifi.html");
-
-// Max payload length
-const MAX_LEN: usize = 256;
-
-#[derive(serde::Deserialize)]
-struct FormData<'a> {
-    ssid: &'a str,
-    password: &'a str,
-}
 
 fn main() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
@@ -32,14 +21,56 @@ fn main() -> anyhow::Result<()> {
 
     let peripherals = Peripherals::take()?;
     let sys_loop = EspSystemEventLoop::take()?;
-    let nvs = EspDefaultNvsPartition::take()?;
+    let nvs_partition = EspDefaultNvsPartition::take()?;
 
     let mut wifi = BlockingWifi::wrap(
-        EspWifi::new(peripherals.modem, sys_loop.clone(), Some(nvs))?,
+        EspWifi::new(
+            peripherals.modem,
+            sys_loop.to_owned(),
+            Some(nvs_partition.to_owned()),
+        )?,
         sys_loop,
     )?;
 
-    let wifi_creds = ask_for_wifi(&mut wifi, AP_SSID, AP_PASSWORD)?;
+    let namespace = "ask_for_wifi";
+    let key = "wifi_creds";
+
+    let mut nvs = {
+        match EspNvs::new(nvs_partition, namespace, true) {
+            Ok(nvs) => {
+                info!("Got namespace {:?} from default partition", namespace);
+                nvs
+            }
+            Err(e) => panic!("Could't get namespace {:?}", e),
+        }
+    };
+
+    let buffer: &mut [u8] = &mut [0; 256];
+
+    let wifi_creds = {
+        let stored_wifi_creds = nvs
+            .get_raw(key, buffer)
+            .unwrap_or_default()
+            .and_then(|b| postcard::from_bytes::<WifiCreds>(b).ok());
+
+        match stored_wifi_creds {
+            Some(wifi_creds) => {
+                info!("Loaded wifi creds from nvs");
+                wifi_creds
+            }
+            None => {
+                info!("Couldn't load wifi creds from nvs, starting AP to ask...");
+                let wc = ask_for_wifi(&mut wifi, AP_SSID, AP_PASSWORD)?;
+
+                match nvs.set_raw(key, &postcard::to_vec::<_, 256>(&wc).unwrap()) {
+                    Ok(_) => info!("Successfully stored wifi creds in NVS"),
+                    Err(e) => error!("Failed to store wifi creds in NVS\n{:?}", e),
+                };
+
+                wc
+            }
+        }
+    };
 
     wifi_connect(&mut wifi, &wifi_creds.ssid, &wifi_creds.password)?;
 

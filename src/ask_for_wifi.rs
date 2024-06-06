@@ -7,6 +7,7 @@ use esp_idf_svc::{
     wifi::{BlockingWifi, EspWifi},
 };
 use log::error;
+use serde::{Deserialize, Serialize};
 
 use crate::{http::http_server, wifi::wifi_access_point};
 
@@ -18,11 +19,17 @@ struct FormData<'a> {
     password: &'a str,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct WifiCreds {
     pub ssid: String,
     pub password: String,
 }
 
+/// Set the wifi up as an access point and host a simple website for the user to
+/// enter their wifi network's SSID and password.
+/// 
+/// The user should connect to the access point and navigate to
+/// http://192.168.71.1.
 pub fn ask_for_wifi(
     wifi: &mut BlockingWifi<EspWifi<'static>>,
     ap_ssid: &str,
@@ -41,7 +48,7 @@ pub fn ask_for_wifi(
     let (tx, rx) = mpsc::channel();
 
     server.fn_handler::<anyhow::Error, _>("/post", Method::Post, move |mut req| {
-        const MAX_REQUEST_LEN: usize = 256;
+        const MAX_REQUEST_LEN: usize = 2048;
 
         let len = req.content_len().unwrap_or(0) as usize;
 
