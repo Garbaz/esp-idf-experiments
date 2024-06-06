@@ -1,20 +1,16 @@
-use std::sync::mpsc;
 
-use embedded_svc::http::Headers as _;
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::peripherals::Peripherals,
-    http::Method,
-    io::{Read as _, Write as _},
     nvs::EspDefaultNvsPartition,
     wifi::{BlockingWifi, EspWifi},
 };
-use log::{error, info};
+use log::info;
 
 use esp_idf_experiments::{
-    ask_for_wifi::{ask_for_wifi, WifiCreds},
-    http::{http_server, https_client, ntfy_send},
-    wifi::{wifi_access_point, wifi_connect},
+    ask_for_wifi::ask_for_wifi,
+    http::{https_client, ntfy_send},
+    wifi::wifi_connect,
 };
 
 const AP_SSID: &str = "esp32c3";
